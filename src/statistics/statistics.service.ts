@@ -1,27 +1,39 @@
-// src/statistics/statistics.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Document } from 'src/documents/schemas/document.schema';
 import { User } from 'src/users/schemas/user.schema';
+import { PlatformStats, GLOBAL_STATS_ID } from './schemas/platform-stats.schema'; // <-- Import
 
 @Injectable()
 export class StatisticsService {
   constructor(
     @InjectModel(Document.name) private documentModel: Model<Document>,
     @InjectModel(User.name) private userModel: Model<User>,
+    @InjectModel(PlatformStats.name) private platformStatsModel: Model<PlatformStats>, // <-- Inject
   ) {}
 
+  // ID của document thống kê duy nhất
+  private statsId = GLOBAL_STATS_ID;
+
+  /**
+   * API CHÍNH: Lấy thống kê (cực nhanh)
+   */
   async getPlatformStats() {
-    const totalUploads = await this.documentModel.countDocuments();
-    const activeUsers = await this.userModel.countDocuments({ status: 'ACTIVE' });
-
-    // Tính tổng downloads bằng Aggregation
-    const downloadAgg = await this.documentModel.aggregate([
-      { $group: { _id: null, totalDownloads: { $sum: '$downloadCount' } } }
-    ]);
-    const totalDownloads = downloadAgg[0]?.totalDownloads || 0;
-
+    // Luôn tìm/tạo document stats với ID cố định
+    const stats = await this.platformStatsModel.findById(this.statsId);
+    if (!stats) {
+      // Nếu chưa có, tạo mới
+      const newStats = await this.platformStatsModel.create({ _id: this.statsId });
+      return this.formatStats(newStats);
+    }
+    
+    return this.formatStats(stats);
+  }
+  
+  // Helper để tính toán Avg và trả về
+  private formatStats(stats: PlatformStats) {
+    const { totalUploads, totalDownloads, activeUsers } = stats;
     const avgDlPerDoc = totalUploads > 0 ? (totalDownloads / totalUploads) : 0;
 
     return {
@@ -31,16 +43,43 @@ export class StatisticsService {
       avgDlPerDoc: parseFloat(avgDlPerDoc.toFixed(2)),
     };
   }
-
+  
+  /**
+   * API phụ (lấy biểu đồ, không cần sửa)
+   */
   async getUploadsOverTime() {
-    // (Logic phức tạp hơn, ví dụ: group theo ngày)
-    // Tạm thời trả về dữ liệu giả
+    // (Logic này vẫn ổn vì bạn đã hardcode, nếu query thật thì phải cẩn thận)
     return [
       { date: '2025-10-01', count: 45 },
-      { date: '2025-10-08', count: 52 },
-      { date: '2025-10-15', count: 68 },
-      { date: '2025-10-22', count: 71 },
-      { date: '2025-10-29', count: 85 },
+      // ...
     ];
+  }
+
+  /**
+   * CÁC HÀM CẬP NHẬT (dùng $inc để đảm bảo an toàn)
+   * upsert: true = Tự động tạo doc stats nếu nó chưa tồn tại.
+   */
+  async incrementTotalUploads(amount: number = 1) {
+    await this.platformStatsModel.updateOne(
+      { _id: this.statsId },
+      { $inc: { totalUploads: amount } },
+      { upsert: true },
+    );
+  }
+
+  async incrementTotalDownloads(amount: number = 1) {
+    await this.platformStatsModel.updateOne(
+      { _id: this.statsId },
+      { $inc: { totalDownloads: amount } },
+      { upsert: true },
+    );
+  }
+
+  async incrementActiveUsers(amount: number = 1) {
+    await this.platformStatsModel.updateOne(
+      { _id: this.statsId },
+      { $inc: { activeUsers: amount } },
+      { upsert: true },
+    );
   }
 }

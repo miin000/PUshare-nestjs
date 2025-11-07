@@ -6,7 +6,7 @@ import { UsersModule } from 'src/users/users.module';
 import { DocumentsModule } from 'src/documents/documents.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from 'src/users/schemas/user.schema';
-import { DocumentSchema } from 'src/documents/schemas/document.schema';
+import { Document, DocumentSchema } from 'src/documents/schemas/document.schema';
 
 @Module({
   imports: [

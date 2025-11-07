@@ -6,7 +6,8 @@ import { Controller, Post, UseGuards, UseInterceptors, UploadedFile,
     Get,
     Query,
     Delete,
-    Patch} from '@nestjs/common';
+    Patch,
+    BadRequestException} from '@nestjs/common';
 import { DocumentsService } from './documents.service';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -14,6 +15,7 @@ import { UploadDocumentDto } from './dto/upload-document.dto';
 import express from 'express';
 import { GetDocumentsQueryDto } from './dto/get-documents-query.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
+import { Types } from 'mongoose';
 
 @UseGuards(AuthGuard('jwt')) // Yêu cầu đăng nhập
 @Controller('documents')
@@ -66,9 +68,22 @@ export class DocumentsController {
     return this.documentsService.findAll(queryDto);
   }
 
+    // R1.2.3: Xem danh sách tài liệu từ User đó
+  @Get('my-uploads')
+  getMyUploads(
+    @Request() req,
+    @Query() queryDto: GetDocumentsQueryDto
+  ) {
+    const userId = req.user.userId;
+    return this.documentsService.findUserDocuments(userId, queryDto);
+  }
+
   // R1.2.2: Xem chi tiết tài liệu
   @Get(':id')
   findOne(@Param('id') docId: string) {
+    if (!Types.ObjectId.isValid(docId)) {
+      throw new BadRequestException('Invalid document ID format');
+    }
     return this.documentsService.findOne(docId);
   }
 
@@ -91,15 +106,5 @@ export class DocumentsController {
   ) {
     const userId = req.user.userId;
     return this.documentsService.remove(docId, userId);
-  }
-
-  // R1.2.3: Xem danh sách tài liệu từ User đó
-  @Get('my-uploads')
-  getMyUploads(
-    @Request() req,
-    @Query() queryDto: GetDocumentsQueryDto
-  ) {
-    const userId = req.user.userId;
-    return this.documentsService.findUserDocuments(userId, queryDto);
   }
 }

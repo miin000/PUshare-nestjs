@@ -22,7 +22,7 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  @UseGuards(AuthGuard('jwt')) // <-- BẢO VỆ API NÀY
+  @UseGuards(AuthGuard('jwt'))
   @Get('me')
   getProfile(@Request() req) {  
     // req.user được gán từ hàm validate() của JwtStrategy

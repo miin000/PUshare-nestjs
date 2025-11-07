@@ -13,7 +13,19 @@ export class GetDocumentsQueryDto {
 
   @IsOptional()
   @IsIn(['uploadDate', 'downloads'])
-  sortBy?: string;
+  sortBy?: string = 'uploadDate';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: string = 'desc';
+
+  @IsOptional()
+  @IsString()
+  subject?: string; // R1.3.2
+
+  @IsOptional()
+  @IsString()
+  documentType?: string; // R1.3.2 
 
   @IsOptional()
   @Type(() => Number)

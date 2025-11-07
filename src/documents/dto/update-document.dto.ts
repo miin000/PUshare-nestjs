@@ -10,6 +10,18 @@ export class UpdateDocumentDto {
   @IsOptional()
   description?: string;
 
+  @IsString()
+  @IsOptional()
+  subject?: string;
+
+  @IsString()
+  @IsOptional()
+  documentType?: string;
+
+  @IsString()
+  @IsOptional()
+  schoolYear?: string;
+
   @IsArray()
   @IsString({ each: true })
   @IsOptional()

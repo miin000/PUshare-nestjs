@@ -4,7 +4,19 @@ import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  
+  app.enableCors({
+    // Cho phép frontend của bạn (thường là localhost:3000)
+    origin: 'http://localhost:3000', 
+    
+    // Đây là chìa khóa: Cho phép frontend đọc header 'Content-Disposition'
+    exposedHeaders: ['Content-Disposition'], 
+  });
+
   app.useGlobalPipes(new ValidationPipe());
-  await app.listen(process.env.PORT ?? 3000);
+
+  app.setGlobalPrefix('api');
+
+  await app.listen(process.env.PORT ?? 8000);
 }
 bootstrap();

@@ -6,6 +6,7 @@ import { Document, DocumentStatus } from 'src/documents/schemas/document.schema'
 import { User, UserRole, UserStatus } from 'src/users/schemas/user.schema';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
 import { LogsService } from 'src/logs/logs.service';
+import { StatisticsService } from 'src/statistics/statistics.service';
 
 @Injectable()
 export class AdminService {
@@ -13,6 +14,7 @@ export class AdminService {
     @InjectModel(User.name) private userModel: Model<User>,
     @InjectModel(Document.name) private documentModel: Model<Document>,
     private logsService: LogsService,
+    private statisticsService: StatisticsService,
   ) {}
 
   private async updateUserStatus(userId: string, status: UserStatus): Promise<User> {
@@ -51,6 +53,8 @@ export class AdminService {
   async deleteUser(userId: string): Promise<{ message: string }> {
     const user = await this.userModel.findByIdAndDelete(userId);
     if (!user) throw new NotFoundException('User not found');
+
+    await this.statisticsService.incrementActiveUsers(-1);
     // TODO: Xóa tất cả tài liệu của user này (hoặc gán cho user "deleted")
     return { message: 'User deleted successfully' };
   }
@@ -59,6 +63,8 @@ export class AdminService {
   async deleteDocument(docId: string): Promise<{ message: string }> {
     const doc = await this.documentModel.findByIdAndDelete(docId);
     if (!doc) throw new NotFoundException('Document not found');
+
+    await this.statisticsService.incrementTotalUploads(-1);
     // TODO: Xóa file vật lý
     return { message: 'Document deleted successfully' };
   }
@@ -129,12 +135,20 @@ export class AdminService {
 
   async blockUser(userId: string, actorId: string): Promise<User> {
     await this.logsService.createLog(actorId, 'BLOCK_USER', userId);
+
+    // CẬP NHẬT MỚI: Giảm activeUsers
+    await this.statisticsService.incrementActiveUsers(-1);
+
     return this.updateUserStatus(userId, UserStatus.BLOCKED);
   }
 
     // R2.2.5: Bỏ block User
   async unblockUser(userId: string, actorId: string): Promise<User> {
     await this.logsService.createLog(actorId, 'UNBLOCK_USER', userId);
+
+    // CẬP NHẬT MỚI: Tăng activeUsers
+    await this.statisticsService.incrementActiveUsers(1);
+
     return this.updateUserStatus(userId, UserStatus.ACTIVE);
   }
 

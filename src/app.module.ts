@@ -9,6 +9,9 @@ import { AdminModule } from './admin/admin.module';
 import { StatisticsModule } from './statistics/statistics.module';
 import { LogsModule } from './logs/logs.module';
 
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -21,6 +24,12 @@ import { LogsModule } from './logs/logs.module';
       }),
       inject: [ConfigService],
     }),
+
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+    }),
+
     AuthModule,
     UsersModule,
     DocumentsModule,

@@ -10,12 +10,17 @@ import { createReadStream } from 'fs';
 import { join } from 'path';
 import { GetDocumentsQueryDto } from './dto/get-documents-query.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
+import { StatisticsService } from 'src/statistics/statistics.service';
+
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class DocumentsService {
   constructor(
     @InjectModel(Document.name) private documentModel: Model<Document>,
     private usersService: UsersService, // Inject UsersService
+    private statisticsService: StatisticsService,
+    private configService: ConfigService,
   ) { }
 
   // R1.1.1: Tạo bản ghi tài liệu sau khi upload
@@ -25,9 +30,15 @@ export class DocumentsService {
     uploaderId: string,
   ): Promise<Document> {
 
+    const baseUrl = this.configService.get<string>('API_URL');
+    // file.path là 'uploads/filename.pdf'
+    const relativePath = file.path; 
+    const fullFileUrl = `${baseUrl}/${relativePath.replace(/\\/g, '/')}`;
+
     const documentData = new this.documentModel({
       ...uploadDocumentDto,
-      fileUrl: file.path, // Đường dẫn file đã lưu
+      fileUrl: fullFileUrl, // <-- LƯU URL ĐẦY ĐỦ
+      filePath: file.path,
       fileType: file.mimetype,
       fileSize: file.size,
       uploader: uploaderId,
@@ -35,6 +46,10 @@ export class DocumentsService {
     });
 
     const savedDocument = await documentData.save();
+    await this.usersService.incrementUploadCount(uploaderId);
+
+    // CẬP NHẬT MỚI: Tăng totalUploads
+    await this.statisticsService.incrementTotalUploads(1);
 
     // Cập nhật R1.6.2: Tăng số lượng upload của User
     await this.usersService.incrementUploadCount(uploaderId);
@@ -53,72 +68,70 @@ export class DocumentsService {
       throw new NotFoundException('Document not found');
     }
 
-    const filePath = join(process.cwd(), doc.fileUrl); // doc.fileUrl là 'uploads/filename.pdf'
-    const file = createReadStream(filePath);
+    const localFilePath = join(process.cwd(), doc.filePath);
+    try {
+      const file = createReadStream(localFilePath);
+      
+      // Tăng bộ đếm
+      doc.downloadCount += 1;
+      await doc.save();
+      await this.usersService.incrementTotalDownloads(doc.uploader.toString(), 1);
+      await this.statisticsService.incrementTotalDownloads(1);
+      
+      return {
+        streamableFile: new StreamableFile(file),
+        doc: doc,
+      };
 
-    // R1.6.1: Tăng bộ đếm download của tài liệu
-    doc.downloadCount += 1;
-    await doc.save();
-
-    // R1.6.1: Tăng tổng bộ đếm download của người upload
-    // (Chuyển đổi uploader ID sang string nếu cần)
-    await this.usersService.incrementTotalDownloads(doc.uploader.toString());
-
-    return {
-      streamableFile: new StreamableFile(file),
-      doc: doc,
-    };
+    } catch (error) {
+      console.error(error);
+      throw new NotFoundException('File not found on server storage.');
+    }
   }
 
   // R1.2.1, R1.3.1, R1.3.2, R1.3.3: Lấy danh sách tài liệu
-  async findAll(queryDto: GetDocumentsQueryDto) {
-    // Gán giá trị mặc định
+  async findAll(query: GetDocumentsQueryDto) {
     const {
-      page = 1,
-      limit = 10,
       search,
       faculty,
+      subject,
+      documentType,
       sortBy = 'uploadDate',
-    } = queryDto;
+      sortOrder = 'desc',
+      page = 1,
+      limit = 10,
+    } = query;
 
-    const query: FilterQuery<Document> = {
-      status: 'VISIBLE',
-    };
+    const filter: any = {};
 
     if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
+      filter.title = { $regex: search, $options: 'i' };
     }
+    if (faculty) filter.faculty = faculty;
+    if (subject) filter.subject = subject;
+    if (documentType) filter.type = documentType;
 
-    if (faculty) {
-      query.faculty = faculty;
-    }
-
-    const sortOptions: Record<string, 1 | -1> = {};
-    sortOptions[sortBy] = -1;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
     const skip = (page - 1) * limit;
 
-    const [documents, totalDocuments] = await Promise.all([
-      this.documentModel
-        .find(query)
-        .populate('uploader', 'fullName')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.documentModel.countDocuments(query),
-    ]);
+    const documents = await this.documentModel
+      .find(filter)
+      .sort({ [sortBy]: sortDirection })
+      .skip(skip)
+      .limit(limit)
+      .populate('uploader', 'fullName email')
+      .exec();
+
+    const total = await this.documentModel.countDocuments(filter).exec();
 
     return {
       data: documents,
       pagination: {
-        total: totalDocuments,
+        total,
         page,
         limit,
-        totalPages: Math.ceil(totalDocuments / limit),
+        totalPages: Math.ceil(total / limit),
       },
     };
   }
@@ -187,6 +200,10 @@ export class DocumentsService {
     // Ví dụ: fs.unlinkSync(doc.fileUrl);
 
     await doc.deleteOne();
+    await this.usersService.incrementUploadCount(userId, -1);
+
+    // CẬP NHẬT MỚI: Giảm totalUploads
+    await this.statisticsService.incrementTotalUploads(-1);
 
     // Cập nhật lại bộ đếm upload của User
     await this.usersService.incrementUploadCount(userId, -1); // Giảm đi 1

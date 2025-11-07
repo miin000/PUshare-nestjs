@@ -21,6 +21,9 @@ export class Document extends mongoose.Document {
   fileUrl: string; // Đường dẫn tới file đã lưu (ví dụ: /uploads/ten-file.pdf)
 
   @Prop({ required: true })
+  filePath: string; // Đường dẫn nội bộ (uploads/file.pdf)
+
+  @Prop({ required: true })
   fileType: string; // 'PDF', 'DOCX', v.v.
 
   @Prop({ required: true })
@@ -32,11 +35,17 @@ export class Document extends mongoose.Document {
   @Prop({ type: String, enum: DocumentStatus, default: DocumentStatus.VISIBLE })
   status: DocumentStatus;
 
-  @Prop({ type: [String] })
-  tags: string[]; // ['Physics', 'Exam Paper']
+  @Prop()
+  faculty: string; // Khoa (VD: 'Information Technology')
 
   @Prop()
-  faculty: string; // 'Information Technology'
+  subject: string; // Môn học (VD: 'Software Engineering', 'Calculus')
+
+  @Prop()
+  documentType: string; // Thể loại (VD: 'Lecture Notes', 'Exam Paper')
+  
+  @Prop()
+  schoolYear: string; // Năm học (VD: '2024-2025') // 'Information Technology'
 
   @Prop({ default: 0 })
   downloadCount: number;

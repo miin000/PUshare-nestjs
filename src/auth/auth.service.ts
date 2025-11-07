@@ -5,12 +5,14 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
+import { StatisticsService } from 'src/statistics/statistics.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private statisticsService: StatisticsService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -31,6 +33,8 @@ export class AuthService {
       password: hashedPassword,
       fullName,
     });
+
+    await this.statisticsService.incrementActiveUsers(1);
 
     // 4. Trả về thông tin (không trả password)
     const { password: _, ...result } = user.toObject();
