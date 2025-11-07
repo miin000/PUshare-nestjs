@@ -90,48 +90,54 @@ export class DocumentsService {
   }
 
   // R1.2.1, R1.3.1, R1.3.2, R1.3.3: Lấy danh sách tài liệu
-  async findAll(query: GetDocumentsQueryDto) {
-    const {
-      search,
-      faculty,
-      subject,
-      documentType,
-      sortBy = 'uploadDate',
-      sortOrder = 'desc',
-      page = 1,
-      limit = 10,
-    } = query;
+  async findAll(queryDto: GetDocumentsQueryDto) {
+    const { page = 1, limit = 10, search, faculty, subject, documentType, sortBy = 'uploadDate', sortOrder = 'desc' } = queryDto;
 
-    const filter: any = {};
+    const query: FilterQuery<Document> = {
+      status: 'VISIBLE',
+    };
 
     if (search) {
-      filter.title = { $regex: search, $options: 'i' };
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { subject: { $regex: search, $options: 'i' } },
+      ];
     }
-    if (faculty) filter.faculty = faculty;
-    if (subject) filter.subject = subject;
-    if (documentType) filter.type = documentType;
+    if (faculty) query.faculty = faculty;
+    if (subject) query.subject = subject;
+    if (documentType) query.documentType = documentType;
 
-    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+    const sortOptions = {};
+    
+    // --- SỬA LỖI Ở ĐÂY ---
+    // Ánh xạ 'downloads' (từ frontend) sang 'downloadCount' (tên trường CSDL)
+    const sortField = sortBy === 'downloads' ? 'downloadCount' : sortBy;
+    // --- KẾT THÚC SỬA LỖI ---
+    
+    const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
+    sortOptions[sortField] = sortOrderValue;
 
     const skip = (page - 1) * limit;
 
-    const documents = await this.documentModel
-      .find(filter)
-      .sort({ [sortBy]: sortDirection })
-      .skip(skip)
-      .limit(limit)
-      .populate('uploader', 'fullName email')
-      .exec();
-
-    const total = await this.documentModel.countDocuments(filter).exec();
+    const [documents, totalDocuments] = await Promise.all([
+      this.documentModel
+        .find(query)
+        .populate('uploader', 'fullName')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.documentModel.countDocuments(query),
+    ]);
 
     return {
       data: documents,
       pagination: {
-        total,
+        total: totalDocuments,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(totalDocuments / limit),
       },
     };
   }
