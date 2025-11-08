@@ -7,6 +7,8 @@ import { DocumentsModule } from 'src/documents/documents.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from 'src/users/schemas/user.schema';
 import { Document, DocumentSchema } from 'src/documents/schemas/document.schema';
+import { Subject, SubjectSchema } from 'src/subjects/schemas/subject.schema';
+import { Major, MajorSchema } from 'src/majors/schemas/major.schema';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { Document, DocumentSchema } from 'src/documents/schemas/document.schema'
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Document.name, schema: DocumentSchema },
+      { name: Subject.name, schema: SubjectSchema },
+      { name: Major.name, schema: MajorSchema },
     ]),
   ],
   controllers: [AdminController],

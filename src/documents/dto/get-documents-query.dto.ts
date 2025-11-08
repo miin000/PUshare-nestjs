@@ -1,5 +1,4 @@
-// src/documents/dto/get-documents-query.dto.ts
-import { IsOptional, IsString, IsIn, IsInt, Min } from 'class-validator';
+import { IsOptional, IsString, IsIn, IsInt, Min, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetDocumentsQueryDto {
@@ -21,11 +20,17 @@ export class GetDocumentsQueryDto {
 
   @IsOptional()
   @IsString()
-  subject?: string; // R1.3.2
+  subject?: string; // Trường cũ giữ nguyên
+
+  // ✅ subjects sẽ được xử lý ở Controller level
+  // Không cần Transform phức tạp
+  @IsOptional()
+  @IsArray()
+  subjects?: string[];
 
   @IsOptional()
   @IsString()
-  documentType?: string; // R1.3.2 
+  documentType?: string;
 
   @IsOptional()
   @Type(() => Number)

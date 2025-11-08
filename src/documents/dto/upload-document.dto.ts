@@ -1,5 +1,5 @@
 // src/documents/dto/upload-document.dto.ts
-import { IsString, IsNotEmpty, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsMongoId } from 'class-validator';
 
 export class UploadDocumentDto {
   @IsString()
@@ -10,9 +10,9 @@ export class UploadDocumentDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
-  @IsOptional()
-  subject?: string;
+  @IsMongoId() // Đảm bảo đây là một ID của MongoDB
+  @IsNotEmpty()
+  subject: string;
 
   @IsString()
   @IsOptional()

@@ -24,20 +24,16 @@ export class DocumentsService {
   ) { }
 
   // R1.1.1: Tạo bản ghi tài liệu sau khi upload
-  async create(
-    uploadDocumentDto: UploadDocumentDto,
-    file: Express.Multer.File,
-    uploaderId: string,
-  ): Promise<Document> {
+  // documents.service.ts
 
+  async create(uploadDocumentDto: UploadDocumentDto, file: Express.Multer.File, uploaderId: string): Promise<Document> {
     const baseUrl = this.configService.get<string>('API_URL');
-    // file.path là 'uploads/filename.pdf'
-    const relativePath = file.path; 
+    const relativePath = file.path;
     const fullFileUrl = `${baseUrl}/${relativePath.replace(/\\/g, '/')}`;
 
     const documentData = new this.documentModel({
       ...uploadDocumentDto,
-      fileUrl: fullFileUrl, // <-- LƯU URL ĐẦY ĐỦ
+      fileUrl: fullFileUrl,
       filePath: file.path,
       fileType: file.mimetype,
       fileSize: file.size,
@@ -46,16 +42,25 @@ export class DocumentsService {
     });
 
     const savedDocument = await documentData.save();
-    await this.usersService.incrementUploadCount(uploaderId);
 
-    // CẬP NHẬT MỚI: Tăng totalUploads
+    // 🧾 Thêm log kiểm tra subject sau khi save
+    console.log('📄 [BEFORE POPULATE] savedDocument.subject =', savedDocument.subject);
+
+    await savedDocument.populate([
+      { path: 'subject', select: 'name code' },
+      { path: 'uploader', select: 'fullName avatarUrl' },
+    ]);
+
+    // 🧾 Log sau khi populate
+    console.log('✅ [AFTER POPULATE] savedDocument.subject =', savedDocument.subject);
+
+    await this.usersService.incrementUploadCount(uploaderId, 1);
+    // Cập nhật bộ đếm toàn trang
     await this.statisticsService.incrementTotalUploads(1);
-
-    // Cập nhật R1.6.2: Tăng số lượng upload của User
-    await this.usersService.incrementUploadCount(uploaderId);
 
     return savedDocument;
   }
+
 
   // R1.1.2 & R1.1.3: Download tài liệu
   async download(
@@ -71,13 +76,13 @@ export class DocumentsService {
     const localFilePath = join(process.cwd(), doc.filePath);
     try {
       const file = createReadStream(localFilePath);
-      
+
       // Tăng bộ đếm
       doc.downloadCount += 1;
       await doc.save();
       await this.usersService.incrementTotalDownloads(doc.uploader.toString(), 1);
       await this.statisticsService.incrementTotalDownloads(1);
-      
+
       return {
         streamableFile: new StreamableFile(file),
         doc: doc,
@@ -90,63 +95,83 @@ export class DocumentsService {
   }
 
   // R1.2.1, R1.3.1, R1.3.2, R1.3.3: Lấy danh sách tài liệu
-  async findAll(queryDto: GetDocumentsQueryDto) {
-    const { page = 1, limit = 10, search, faculty, subject, documentType, sortBy = 'uploadDate', sortOrder = 'desc' } = queryDto;
+async findAll(queryDto: GetDocumentsQueryDto) {
+  console.log('📦 [findAll] incoming queryDto =', queryDto);
 
-    const query: FilterQuery<Document> = {
-      status: 'VISIBLE',
-    };
+  const {
+    page = 1,
+    limit = 10,
+    search,
+    subject,
+    subjects,
+    documentType,
+    sortBy = 'uploadDate',
+    sortOrder = 'desc',
+  } = queryDto;
 
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { subject: { $regex: search, $options: 'i' } },
-      ];
-    }
-    if (faculty) query.faculty = faculty;
-    if (subject) query.subject = subject;
-    if (documentType) query.documentType = documentType;
+  const query: FilterQuery<Document> = { status: 'VISIBLE' };
 
-    const sortOptions = {};
-    
-    // --- SỬA LỖI Ở ĐÂY ---
-    // Ánh xạ 'downloads' (từ frontend) sang 'downloadCount' (tên trường CSDL)
-    const sortField = sortBy === 'downloads' ? 'downloadCount' : sortBy;
-    // --- KẾT THÚC SỬA LỖI ---
-    
-    const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
-    sortOptions[sortField] = sortOrderValue;
-
-    const skip = (page - 1) * limit;
-
-    const [documents, totalDocuments] = await Promise.all([
-      this.documentModel
-        .find(query)
-        .populate('uploader', 'fullName')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.documentModel.countDocuments(query),
-    ]);
-
-    return {
-      data: documents,
-      pagination: {
-        total: totalDocuments,
-        page,
-        limit,
-        totalPages: Math.ceil(totalDocuments / limit),
-      },
-    };
+  // Search
+  if (search) {
+    query.$or = [
+      { title: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } },
+    ];
   }
+
+  // ✅ FIX: Ưu tiên subjects[] nếu có, fallback về subject
+  if (subjects && subjects.length > 0) {
+    query.subject = { $in: subjects };
+    console.log('✅ [findAll] Filtering by subjects:', subjects);
+  } else if (subject) {
+    query.subject = subject;
+    console.log('✅ [findAll] Filtering by single subject:', subject);
+  }
+
+  if (documentType) {
+    query.documentType = documentType;
+  }
+
+  console.log('🧭 [findAll] built query =', JSON.stringify(query));
+
+  // Sort
+  const sortOptions = {};
+  const sortField = sortBy === 'downloads' ? 'downloadCount' : sortBy;
+  const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
+  sortOptions[sortField] = sortOrderValue;
+
+  // Pagination
+  const skip = (page - 1) * limit;
+
+  const [documents, totalDocuments] = await Promise.all([
+    this.documentModel
+      .find(query)
+      .populate('uploader', 'fullName')
+      .populate('subject', 'name code')
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limit)
+      .exec(),
+    this.documentModel.countDocuments(query),
+  ]);
+
+  return {
+    data: documents,
+    pagination: {
+      total: totalDocuments,
+      page,
+      limit,
+      totalPages: Math.ceil(totalDocuments / limit),
+    },
+  };
+}
 
   // R1.2.2: Xem chi tiết tài liệu
   async findOne(docId: string): Promise<Document> {
     const doc = await this.documentModel
       .findById(docId)
-      .populate('uploader', 'fullName avatarUrl'); // Lấy nhiều thông tin hơn
+      .populate('uploader', 'fullName avatarUrl') // Lấy nhiều thông tin hơn
+      .populate('subject', 'name code managingFaculty');
 
     if (!doc) {
       throw new NotFoundException('Document not found');
@@ -159,17 +184,18 @@ export class DocumentsService {
     return doc;
   }
 
-  private async getDocumentAndCheckOwnership(docId: string, userId: string): Promise<Document> {
+  private async getDocumentAndCheckOwnership(docId: string, userId: any): Promise<Document> {
     const doc = await this.documentModel.findById(docId);
 
     if (!doc) {
       throw new NotFoundException('Document not found');
     }
 
-    // So sánh ID người upload (từ CSDL) với ID user (từ token)
-    if (doc.uploader.toString() !== userId) {
+    if (!doc.uploader.equals(userId)) {
+      // (Code cũ: doc.uploader.toString() !== userId)
       throw new ForbiddenException('You do not have permission to modify this document');
     }
+    // --- KẾT THÚC SỬA LỖI ---
 
     return doc;
   }
@@ -182,11 +208,10 @@ export class DocumentsService {
   ): Promise<Document> {
     await this.getDocumentAndCheckOwnership(docId, userId);
 
-    const updatedDoc = await this.documentModel.findByIdAndUpdate(
-      docId,
-      updateDocumentDto,
-      { new: true },
-    );
+    const updatedDoc = await this.documentModel
+      .findByIdAndUpdate(docId, updateDocumentDto, { new: true })
+      .populate('subject', 'name code') // ✅ Thêm dòng này
+      .populate('uploader', 'fullName avatarUrl'); // ✅ Cho đồng nhất với các API khác
 
     if (!updatedDoc) {
       throw new NotFoundException('Document not found');
@@ -194,6 +219,7 @@ export class DocumentsService {
 
     return updatedDoc;
   }
+
 
   // R1.1.5: Xóa tài liệu
   async remove(docId: string, userId: string): Promise<{ message: string }> {
@@ -203,59 +229,39 @@ export class DocumentsService {
 
     // TODO: Xóa file vật lý khỏi thư mục /uploads
     // (Chúng ta sẽ làm điều này sau, bây giờ chỉ xóa CSDL)
-    // Ví dụ: fs.unlinkSync(doc.fileUrl);
+    // Ví dụ: fs.unlinkSync(doc.filePath);
 
     await doc.deleteOne();
-    await this.usersService.incrementUploadCount(userId, -1);
-
-    // CẬP NHẬT MỚI: Giảm totalUploads
-    await this.statisticsService.incrementTotalUploads(-1);
 
     // Cập nhật lại bộ đếm upload của User
-    await this.usersService.incrementUploadCount(userId, -1); // Giảm đi 1
+    await this.usersService.incrementUploadCount(userId.toString(), -1); // Chuyển sang string ở đây
+    await this.statisticsService.incrementTotalUploads(-1);
 
     return { message: 'Document deleted successfully' };
   }
 
   // R1.2.3: Lấy tài liệu của một user cụ thể
   async findUserDocuments(userId: string, queryDto: GetDocumentsQueryDto) {
-    // Gán giá trị mặc định để tránh undefined
-    const {
-      page = 1,
-      limit = 10,
-      search,
-      sortBy = 'uploadDate',
-    } = queryDto;
-
-    // Bắt đầu với query chỉ lọc theo uploader
-    const query: FilterQuery<Document> = {
-      uploader: userId as any,
-    };
-
-    // Thêm các bộ lọc khác
-    if (search) {
-      query.title = { $regex: search, $options: 'i' };
-    }
-
-    // Không lọc theo status, user nên thấy cả tài liệu bị block của mình
-
-    // Khai báo rõ ràng kiểu cho sortOptions
-    const sortOptions: Record<string, 1 | -1> = {};
-    sortOptions[sortBy] = -1;
-
-    // Bảo đảm page và limit là số chắc chắn
+    const { page = 1, limit = 10, search, sortBy = 'uploadDate', sortOrder = 'desc' } = queryDto;
+    const query: FilterQuery<Document> = { uploader: userId as any };
+    if (search) query.title = { $regex: search, $options: 'i' };
+    const sortOptions = {};
+    const sortField = sortBy === 'downloads' ? 'downloadCount' : sortBy;
+    const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
+    sortOptions[sortField] = sortOrderValue;
     const skip = (page - 1) * limit;
-
     const [documents, totalDocuments] = await Promise.all([
       this.documentModel
         .find(query)
+        // --- SỬA LỖI Ở ĐÂY ---
+        .populate('subject', 'name code') // <-- THÊM DÒNG NÀY
+        // --- KẾT THÚC ---
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)
         .exec(),
       this.documentModel.countDocuments(query),
     ]);
-
     return {
       data: documents,
       pagination: {
@@ -266,5 +272,4 @@ export class DocumentsService {
       },
     };
   }
-
 }

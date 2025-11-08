@@ -1,8 +1,9 @@
 // src/users/users.controller.ts
-import { Controller, Get, Body, Patch, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Body, Patch, Param, UseGuards, Request, Post } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @UseGuards(AuthGuard('jwt')) // Bảo vệ tất cả các route trong controller này
 @Controller('users')
@@ -14,6 +15,11 @@ export class UsersController {
   updateMyProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
     // req.user.userId lấy từ token
     return this.usersService.updateProfile(req.user.userId, updateUserDto);
+  }
+
+  @Post('me/change-password')
+  changeMyPassword(@Request() req, @Body() changePasswordDto: ChangePasswordDto) {
+    return this.usersService.changePassword(req.user.userId, changePasswordDto);
   }
 
   // R1.2.4: Xem hồ sơ của User khác

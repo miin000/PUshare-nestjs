@@ -2,6 +2,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { User } from 'src/users/schemas/user.schema';
+import { Subject } from 'src/subjects/schemas/subject.schema';
 
 export enum DocumentStatus {
   PROCESSING = 'PROCESSING', // Đang chờ (ví dụ: quét virus, nén)
@@ -38,8 +39,8 @@ export class Document extends mongoose.Document {
   @Prop()
   faculty: string; // Khoa (VD: 'Information Technology')
 
-  @Prop()
-  subject: string; // Môn học (VD: 'Software Engineering', 'Calculus')
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Subject', required: true })
+  subject: Subject; // Môn học (VD: 'Software Engineering', 'Calculus')
 
   @Prop()
   documentType: string; // Thể loại (VD: 'Lecture Notes', 'Exam Paper')

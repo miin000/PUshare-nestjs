@@ -1,5 +1,5 @@
 // src/admin/admin.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model } from 'mongoose';
 import { Document, DocumentStatus } from 'src/documents/schemas/document.schema';
@@ -7,12 +7,22 @@ import { User, UserRole, UserStatus } from 'src/users/schemas/user.schema';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
 import { LogsService } from 'src/logs/logs.service';
 import { StatisticsService } from 'src/statistics/statistics.service';
+import { Subject } from 'src/subjects/schemas/subject.schema';
+import { Major } from 'src/majors/schemas/major.schema';
+import { CreateSubjectDto } from './dto/create-subject.dto';
+import { UpdateSubjectDto } from './dto/update-subject.dto';
+import { CreateMajorDto } from './dto/create-major.dto';
+import { UpdateMajorDto } from './dto/update-major.dto';
+
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AdminService {
   constructor(
     @InjectModel(User.name) private userModel: Model<User>,
     @InjectModel(Document.name) private documentModel: Model<Document>,
+    @InjectModel(Subject.name) private subjectModel: Model<Subject>,
+    @InjectModel(Major.name) private majorModel: Model<Major>,
     private logsService: LogsService,
     private statisticsService: StatisticsService,
   ) {}
@@ -133,23 +143,90 @@ export class AdminService {
     };
   }
 
+  async resetPassword(userId: string, actorId: string): Promise<{ message: string; newPassword?: string }> {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    // Tạo mật khẩu ngẫu nhiên hoặc dùng mật khẩu mặc định
+    const newPassword = '123456'; // Bạn có thể thay bằng logic tạo chuỗi ngẫu nhiên
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashedPassword;
+    await user.save();
+
+    await this.logsService.createLog(actorId, 'RESET_PASSWORD', userId);
+    
+    // Chỉ trả về mật khẩu mới cho Admin (để họ thông báo cho user)
+    return { 
+      message: `Đã reset mật khẩu cho ${user.email} thành công.`,
+      newPassword: newPassword 
+    };
+  }
+
+  // --- (MỚI) Quản lý Môn học (Subject) ---
+  
+  async createSubject(createSubjectDto: CreateSubjectDto) {
+    const existing = await this.subjectModel.findOne({ $or: [{ code: createSubjectDto.code }, { name: createSubjectDto.name }] });
+    if (existing) {
+      throw new ConflictException('Subject code or name already exists');
+    }
+    const newSubject = new this.subjectModel(createSubjectDto);
+    return newSubject.save();
+  }
+
+  async findAllSubjects() {
+    return this.subjectModel.find().sort({ name: 1 }).exec();
+  }
+
+  async updateSubject(id: string, updateSubjectDto: UpdateSubjectDto) {
+    const subject = await this.subjectModel.findByIdAndUpdate(id, updateSubjectDto, { new: true });
+    if (!subject) throw new NotFoundException('Subject not found');
+    return subject;
+  }
+
+  async removeSubject(id: string) {
+    // TODO: Kiểm tra xem môn học có đang được dùng trong 1 Ngành (Major) không
+    const subject = await this.subjectModel.findByIdAndDelete(id);
+    if (!subject) throw new NotFoundException('Subject not found');
+    return { message: 'Subject deleted successfully' };
+  }
+
   async blockUser(userId: string, actorId: string): Promise<User> {
     await this.logsService.createLog(actorId, 'BLOCK_USER', userId);
-
-    // CẬP NHẬT MỚI: Giảm activeUsers
     await this.statisticsService.incrementActiveUsers(-1);
-
     return this.updateUserStatus(userId, UserStatus.BLOCKED);
   }
 
-    // R2.2.5: Bỏ block User
   async unblockUser(userId: string, actorId: string): Promise<User> {
     await this.logsService.createLog(actorId, 'UNBLOCK_USER', userId);
-
-    // CẬP NHẬT MỚI: Tăng activeUsers
     await this.statisticsService.incrementActiveUsers(1);
-
     return this.updateUserStatus(userId, UserStatus.ACTIVE);
   }
 
+  // --- (MỚI) Quản lý Ngành học (Major) ---
+
+  async createMajor(createMajorDto: CreateMajorDto) {
+    const existing = await this.majorModel.findOne({ name: createMajorDto.name });
+    if (existing) {
+      throw new ConflictException('Major name already exists');
+    }
+    const newMajor = new this.majorModel(createMajorDto);
+    return newMajor.save();
+  }
+
+  async findAllMajors() {
+    return this.majorModel.find().populate('subjects', 'name code').sort({ name: 1 }).exec();
+  }
+
+  async updateMajor(id: string, updateMajorDto: UpdateMajorDto) {
+    const major = await this.majorModel.findByIdAndUpdate(id, updateMajorDto, { new: true });
+    if (!major) throw new NotFoundException('Major not found');
+    return major;
+  }
+
+  async removeMajor(id: string) {
+    const major = await this.majorModel.findByIdAndDelete(id);
+    if (!major) throw new NotFoundException('Major not found');
+    return { message: 'Major deleted successfully' };
+  }
 }

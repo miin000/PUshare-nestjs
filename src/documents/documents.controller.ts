@@ -17,28 +17,25 @@ import { GetDocumentsQueryDto } from './dto/get-documents-query.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { Types } from 'mongoose';
 
-@UseGuards(AuthGuard('jwt')) // Yêu cầu đăng nhập
+@UseGuards(AuthGuard('jwt'))
 @Controller('documents')
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   // R1.1.1: Upload tài liệu
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file')) // 'file' là tên trường (field name) trong form-data
+  @UseInterceptors(FileInterceptor('file'))
   uploadDocument(
     @Request() req,
     @Body() uploadDocumentDto: UploadDocumentDto,
     @UploadedFile(
-      // Thêm Pipe để validate file
       new ParseFilePipe({
         validators: [
           new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10MB
-          // new FileTypeValidator({ fileType: 'application/pdf' }), // Ví dụ: chỉ cho phép PDF
         ],
       }),
     ) file: Express.Multer.File,
   ) {
-    // req.user.userId lấy từ AuthGuard
     const uploaderId = req.user.userId;
     return this.documentsService.create(uploadDocumentDto, file, uploaderId);
   }
@@ -50,11 +47,8 @@ export class DocumentsController {
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const { streamableFile, doc } = await this.documentsService.download(docId);
-
-    // Lấy tên file gốc để trình duyệt hiển thị
     const originalFilename = doc.fileUrl.split('/').pop();
 
-    // Set headers
     res.set({
       'Content-Type': doc.fileType,
       'Content-Disposition': `attachment; filename="${originalFilename}"`,
@@ -63,12 +57,29 @@ export class DocumentsController {
     return streamableFile;
   }
 
+  // ✅ FIX: Xử lý subjects[] ở controller level
   @Get()
-  findAll(@Query() queryDto: GetDocumentsQueryDto) {
-    return this.documentsService.findAll(queryDto);
+  findAll(@Query() query: any) {
+    const dto = new GetDocumentsQueryDto();
+    
+    // Copy tất cả fields
+    Object.assign(dto, query);
+    
+    // ✅ Xử lý đặc biệt cho subjects[]
+    if (query['subjects[]']) {
+      const raw = query['subjects[]'];
+      dto.subjects = Array.isArray(raw) ? raw : [raw];
+      console.log('✅ [Controller] Processed subjects[] ->', dto.subjects);
+    } else if (query.subjects) {
+      const raw = query.subjects;
+      dto.subjects = Array.isArray(raw) ? raw : [raw];
+      console.log('✅ [Controller] Processed subjects ->', dto.subjects);
+    }
+
+    return this.documentsService.findAll(dto);
   }
 
-    // R1.2.3: Xem danh sách tài liệu từ User đó
+  // R1.2.3: Xem danh sách tài liệu từ User đó
   @Get('my-uploads')
   getMyUploads(
     @Request() req,

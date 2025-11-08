@@ -7,6 +7,11 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/users/schemas/user.schema';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
 
+import { CreateSubjectDto } from './dto/create-subject.dto';
+import { UpdateSubjectDto } from './dto/update-subject.dto';
+import { CreateMajorDto } from './dto/create-major.dto';
+import { UpdateMajorDto } from './dto/update-major.dto';
+
 // Áp dụng cho toàn bộ Controller:
 @UseGuards(AuthGuard('jwt'), RolesGuard) // 1. Yêu cầu đăng nhập, 2. Kiểm tra vai trò
 @Controller('admin')
@@ -15,6 +20,12 @@ export class AdminController {
 
   // --- R2: Moderator Endpoints ---
   // (Admin cũng có thể dùng vì Admin kế thừa Mod)
+
+  @Roles(UserRole.ADMIN)
+  @Post('users/:id/reset-password')
+  resetPassword(@Param('id') userId: string, @Request() req) {
+    return this.adminService.resetPassword(userId, req.user.userId);
+  }
 
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Post('users/:id/block')
@@ -67,5 +78,57 @@ export class AdminController {
   @Get('users')
   getUsers(@Query() queryDto: GetUsersQueryDto) {
     return this.adminService.getUsers(queryDto);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Post('subjects')
+  createSubject(@Body() createSubjectDto: CreateSubjectDto) {
+    return this.adminService.createSubject(createSubjectDto);
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Get('subjects')
+  findAllSubjects() {
+    return this.adminService.findAllSubjects();
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Patch('subjects/:id')
+  updateSubject(
+    @Param('id') id: string,
+    @Body() updateSubjectDto: UpdateSubjectDto,
+  ) {
+    return this.adminService.updateSubject(id, updateSubjectDto);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Delete('subjects/:id')
+  removeSubject(@Param('id') id: string) {
+    return this.adminService.removeSubject(id);
+  }
+
+  // --- (MỚI) Quản lý Ngành học (Major) ---
+  @Roles(UserRole.ADMIN)
+  @Post('majors')
+  createMajor(@Body() createMajorDto: CreateMajorDto) {
+    return this.adminService.createMajor(createMajorDto);
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Get('majors')
+  findAllMajors() {
+    return this.adminService.findAllMajors();
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Patch('majors/:id')
+  updateMajor(@Param('id') id: string, @Body() updateMajorDto: UpdateMajorDto) {
+    return this.adminService.updateMajor(id, updateMajorDto);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Delete('majors/:id')
+  removeMajor(@Param('id') id: string) {
+    return this.adminService.removeMajor(id);
   }
 }
