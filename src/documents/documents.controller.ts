@@ -86,6 +86,15 @@ export class DocumentsController {
     @Query() queryDto: GetDocumentsQueryDto
   ) {
     const userId = req.user.userId;
+    return this.documentsService.findMyDocuments(userId, queryDto);
+  }
+
+  @Get('user/:userId/uploads')
+  getUserUploads(
+    @Param('userId') userId: string,
+    @Query() queryDto: GetDocumentsQueryDto
+  ) {
+    // Gọi hàm mới: findUserDocuments
     return this.documentsService.findUserDocuments(userId, queryDto);
   }
 

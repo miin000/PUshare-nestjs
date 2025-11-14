@@ -1,5 +1,5 @@
 // src/statistics/statistics.controller.ts
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Query } from '@nestjs/common';
 import { StatisticsService } from './statistics.service';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
@@ -18,7 +18,9 @@ export class StatisticsController {
   }
 
   @Get('uploads-over-time')
-  getUploadsOverTime() {
-    return this.statisticsService.getUploadsOverTime();
+  getUploadsOverTime(@Query('days') days?: string) {
+    // Chuyển đổi sang số, mặc định là 30
+    const daysNumber = days ? parseInt(days, 10) : 30;
+    return this.statisticsService.getUploadsOverTime(daysNumber);
   }
 }

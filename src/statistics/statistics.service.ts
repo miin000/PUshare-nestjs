@@ -47,12 +47,43 @@ export class StatisticsService {
   /**
    * API phụ (lấy biểu đồ, không cần sửa)
    */
-  async getUploadsOverTime() {
-    // (Logic này vẫn ổn vì bạn đã hardcode, nếu query thật thì phải cẩn thận)
-    return [
-      { date: '2025-10-01', count: 45 },
-      // ...
-    ];
+  async getUploadsOverTime(days: number = 30) {
+    // Tính toán ngày bắt đầu
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0); // Đặt về đầu ngày
+
+    const results = await this.documentModel.aggregate([
+      {
+        // 1. Lọc các tài liệu trong khoảng 'days' ngày qua
+        $match: {
+          uploadDate: { $gte: startDate },
+        },
+      },
+      {
+        // 2. Nhóm các tài liệu theo ngày (định dạng YYYY-MM-DD)
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$uploadDate' },
+          },
+          count: { $sum: 1 }, // Đếm số lượng
+        },
+      },
+      {
+        // 3. Sắp xếp theo ngày tăng dần
+        $sort: { _id: 1 },
+      },
+      {
+        // 4. Định dạng lại output
+        $project: {
+          _id: 0,
+          date: '$_id',
+          count: '$count',
+        },
+      },
+    ]);
+    
+    return results;
   }
 
   /**

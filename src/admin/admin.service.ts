@@ -15,6 +15,7 @@ import { CreateMajorDto } from './dto/create-major.dto';
 import { UpdateMajorDto } from './dto/update-major.dto';
 
 import * as bcrypt from 'bcrypt';
+import { GetDocumentsQueryDto } from 'src/documents/dto/get-documents-query.dto';
 
 @Injectable()
 export class AdminService {
@@ -228,5 +229,45 @@ export class AdminService {
     const major = await this.majorModel.findByIdAndDelete(id);
     if (!major) throw new NotFoundException('Major not found');
     return { message: 'Major deleted successfully' };
+  }
+
+  async getDocumentsAdmin(queryDto: GetDocumentsQueryDto) {
+    const { page = 1, limit = 10, search, sortBy = 'uploadDate', sortOrder = 'desc' } = queryDto;
+    
+    // Query này KHÔNG lọc status
+    const query: FilterQuery<Document> = {}; 
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        // (Thêm tìm kiếm theo email user nếu cần)
+      ];
+    }
+    
+    // (Bạn có thể thêm filter theo status nếu frontend gửi lên)
+    // if (queryDto.status) { query.status = queryDto.status; }
+
+    const sortOptions = {};
+    const sortField = sortBy === 'downloads' ? 'downloadCount' : 'uploadDate';
+    const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
+    sortOptions[sortField] = sortOrderValue;
+    
+    const skip = (page - 1) * limit;
+    const [documents, totalDocuments] = await Promise.all([
+      this.documentModel
+        .find(query)
+        .populate('uploader', 'fullName email') // Lấy thêm info uploader
+        .populate('subject', 'name')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.documentModel.countDocuments(query),
+    ]);
+    
+    return {
+      data: documents,
+      pagination: { total: totalDocuments, page, limit, totalPages: Math.ceil(totalDocuments / limit) },
+    };
   }
 }

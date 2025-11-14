@@ -11,6 +11,7 @@ import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { CreateMajorDto } from './dto/create-major.dto';
 import { UpdateMajorDto } from './dto/update-major.dto';
+import { GetDocumentsQueryDto } from 'src/documents/dto/get-documents-query.dto';
 
 // Áp dụng cho toàn bộ Controller:
 @UseGuards(AuthGuard('jwt'), RolesGuard) // 1. Yêu cầu đăng nhập, 2. Kiểm tra vai trò
@@ -18,22 +19,19 @@ import { UpdateMajorDto } from './dto/update-major.dto';
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  // --- R2: Moderator Endpoints ---
-  // (Admin cũng có thể dùng vì Admin kế thừa Mod)
-
   @Roles(UserRole.ADMIN)
   @Post('users/:id/reset-password')
   resetPassword(@Param('id') userId: string, @Request() req) {
     return this.adminService.resetPassword(userId, req.user.userId);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN)
   @Post('users/:id/block')
   blockUser(@Param('id') userId: string, @Request() req) {
     return this.adminService.blockUser(userId, req.user.userId);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN)
   @Post('users/:id/unblock')
   unblockUser(@Param('id') userId: string, @Request() req) {
     return this.adminService.unblockUser(userId, req.user.userId);
@@ -59,6 +57,12 @@ export class AdminController {
     return this.adminService.deleteUser(userId);
   }
 
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Get('documents')
+  getDocumentsAdmin(@Query() queryDto: GetDocumentsQueryDto) {
+    return this.adminService.getDocumentsAdmin(queryDto);
+  }
+
   @Roles(UserRole.ADMIN)
   @Delete('documents/:id')
   deleteDocument(@Param('id') docId: string) {
@@ -74,13 +78,13 @@ export class AdminController {
     return this.adminService.setUserRole(userId, role);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN)
   @Get('users')
   getUsers(@Query() queryDto: GetUsersQueryDto) {
     return this.adminService.getUsers(queryDto);
   }
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Post('subjects')
   createSubject(@Body() createSubjectDto: CreateSubjectDto) {
     return this.adminService.createSubject(createSubjectDto);
@@ -92,7 +96,7 @@ export class AdminController {
     return this.adminService.findAllSubjects();
   }
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Patch('subjects/:id')
   updateSubject(
     @Param('id') id: string,
@@ -101,14 +105,14 @@ export class AdminController {
     return this.adminService.updateSubject(id, updateSubjectDto);
   }
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Delete('subjects/:id')
   removeSubject(@Param('id') id: string) {
     return this.adminService.removeSubject(id);
   }
 
   // --- (MỚI) Quản lý Ngành học (Major) ---
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Post('majors')
   createMajor(@Body() createMajorDto: CreateMajorDto) {
     return this.adminService.createMajor(createMajorDto);
@@ -120,13 +124,13 @@ export class AdminController {
     return this.adminService.findAllMajors();
   }
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Patch('majors/:id')
   updateMajor(@Param('id') id: string, @Body() updateMajorDto: UpdateMajorDto) {
     return this.adminService.updateMajor(id, updateMajorDto);
   }
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Delete('majors/:id')
   removeMajor(@Param('id') id: string) {
     return this.adminService.removeMajor(id);

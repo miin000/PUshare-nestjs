@@ -11,6 +11,7 @@ import { join } from 'path';
 import { GetDocumentsQueryDto } from './dto/get-documents-query.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { StatisticsService } from 'src/statistics/statistics.service';
+import { LogsService } from 'src/logs/logs.service';
 
 import { ConfigService } from '@nestjs/config';
 
@@ -21,6 +22,7 @@ export class DocumentsService {
     private usersService: UsersService, // Inject UsersService
     private statisticsService: StatisticsService,
     private configService: ConfigService,
+    private logsService: LogsService,
   ) { }
 
   // R1.1.1: Tạo bản ghi tài liệu sau khi upload
@@ -223,53 +225,88 @@ async findAll(queryDto: GetDocumentsQueryDto) {
 
   // R1.1.5: Xóa tài liệu
   async remove(docId: string, userId: string): Promise<{ message: string }> {
-
-    // Kiểm tra tài liệu có tồn tại VÀ user có quyền sở hữu không
     const doc = await this.getDocumentAndCheckOwnership(docId, userId);
 
-    // TODO: Xóa file vật lý khỏi thư mục /uploads
-    // (Chúng ta sẽ làm điều này sau, bây giờ chỉ xóa CSDL)
-    // Ví dụ: fs.unlinkSync(doc.filePath);
+    // TODO: Xóa file vật lý (fs.unlinkSync(doc.filePath))
 
     await doc.deleteOne();
 
-    // Cập nhật lại bộ đếm upload của User
-    await this.usersService.incrementUploadCount(userId.toString(), -1); // Chuyển sang string ở đây
+    // Cập nhật stats
+    await this.usersService.incrementUploadCount(userId.toString(), -1);
     await this.statisticsService.incrementTotalUploads(-1);
+
+    // --- 3. THÊM GHI LOG CHO THỐNG KÊ ---
+    await this.logsService.createLog(userId.toString(), 'DELETE_OWN_DOCUMENT', docId);
+    // --- KẾT THÚC ---
 
     return { message: 'Document deleted successfully' };
   }
 
   // R1.2.3: Lấy tài liệu của một user cụ thể
-  async findUserDocuments(userId: string, queryDto: GetDocumentsQueryDto) {
+  async findMyDocuments(userId: string, queryDto: GetDocumentsQueryDto) {
     const { page = 1, limit = 10, search, sortBy = 'uploadDate', sortOrder = 'desc' } = queryDto;
+    
+    // Query này KHÔNG lọc status, user xem được hết file của mình
     const query: FilterQuery<Document> = { uploader: userId as any };
+    
     if (search) query.title = { $regex: search, $options: 'i' };
+    
     const sortOptions = {};
-    const sortField = sortBy === 'downloads' ? 'downloadCount' : sortBy;
+    const sortField = sortBy === 'downloads' ? 'downloadCount' : 'uploadDate';
     const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
     sortOptions[sortField] = sortOrderValue;
+    
     const skip = (page - 1) * limit;
     const [documents, totalDocuments] = await Promise.all([
       this.documentModel
         .find(query)
-        // --- SỬA LỖI Ở ĐÂY ---
-        .populate('subject', 'name code') // <-- THÊM DÒNG NÀY
-        // --- KẾT THÚC ---
+        .populate('subject', 'name code') // Đã populate
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)
         .exec(),
       this.documentModel.countDocuments(query),
     ]);
+    
     return {
       data: documents,
-      pagination: {
-        total: totalDocuments,
-        page,
-        limit,
-        totalPages: Math.ceil(totalDocuments / limit),
-      },
+      pagination: { total: totalDocuments, page, limit, totalPages: Math.ceil(totalDocuments / limit) },
+    };
+  }
+
+  // --- HÀM 2: LẤY TÀI LIỆU CÔNG KHAI CỦA NGƯỜI KHÁC (CHO /profile/[userId]) ---
+  async findUserDocuments(userId: string, queryDto: GetDocumentsQueryDto) {
+    const { page = 1, limit = 10, search, sortBy = 'uploadDate', sortOrder = 'desc' } = queryDto;
+    
+    // Query này CHỈ lấy file 'VISIBLE'
+    const query: FilterQuery<Document> = { 
+      uploader: userId as any,
+      status: 'VISIBLE' // <-- SỰ KHÁC BIỆT QUAN TRỌNG
+    }; 
+    
+    if (search) query.title = { $regex: search, $options: 'i' };
+    
+    const sortOptions = {};
+    const sortField = sortBy === 'downloads' ? 'downloadCount' : 'uploadDate';
+    const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
+    sortOptions[sortField] = sortOrderValue;
+    
+    const skip = (page - 1) * limit;
+    const [documents, totalDocuments] = await Promise.all([
+      this.documentModel
+        .find(query)
+        .populate('uploader', 'fullName') // Lấy tên uploader
+        .populate('subject', 'name code') // Lấy tên môn
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.documentModel.countDocuments(query),
+    ]);
+    
+    return {
+      data: documents,
+      pagination: { total: totalDocuments, page, limit, totalPages: Math.ceil(totalDocuments / limit) },
     };
   }
 }

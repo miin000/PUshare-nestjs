@@ -39,4 +39,9 @@ export class UsersController {
   getMyStats(@Request() req) {
     return this.usersService.getMyStats(req.user.userId);
   }
+
+  @Get(':userId/stats')
+  getUserStats(@Param('userId') userId: string) {
+    return this.usersService.getMyStats(userId); // Dùng lại hàm cũ
+  }
 }
