@@ -19,19 +19,19 @@ import { GetDocumentsQueryDto } from 'src/documents/dto/get-documents-query.dto'
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Post('users/:id/reset-password')
   resetPassword(@Param('id') userId: string, @Request() req) {
     return this.adminService.resetPassword(userId, req.user.userId);
   }
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Post('users/:id/block')
   blockUser(@Param('id') userId: string, @Request() req) {
     return this.adminService.blockUser(userId, req.user.userId);
   }
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Post('users/:id/unblock')
   unblockUser(@Param('id') userId: string, @Request() req) {
     return this.adminService.unblockUser(userId, req.user.userId);
@@ -78,7 +78,7 @@ export class AdminController {
     return this.adminService.setUserRole(userId, role);
   }
 
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @Get('users')
   getUsers(@Query() queryDto: GetUsersQueryDto) {
     return this.adminService.getUsers(queryDto);
